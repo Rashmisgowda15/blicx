@@ -45,8 +45,12 @@ class_names = image_datasets['train'].classes
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def train_model(model, criterion, optimizer, num_epochs=10):
+def train_model(model, criterion, optimizer=None, num_epochs=10):
     history = {'train_loss': [], 'train_acc': [], 'val_loss': [], 'val_acc': []}
+    
+    # We ignore the passed optimizer and create a fresh one for refinement
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
     
     for epoch in range(num_epochs):
         print(f'Epoch {epoch+1}/{num_epochs}')
@@ -83,6 +87,9 @@ def train_model(model, criterion, optimizer, num_epochs=10):
             
             history[f'{phase}_loss'].append(epoch_loss)
             history[f'{phase}_acc'].append(epoch_acc.item())
+        
+        # Step the scheduler after each epoch
+        scheduler.step()
 
     return model, history
 
@@ -205,12 +212,25 @@ def evaluate_model(model, dataloader):
     }
 
 if __name__ == "__main__":
-    # Load Pretrained ResNet18
+    # 1. Load Pretrained ResNet18
     model_ft = models.resnet18(pretrained=True)
-    num_ftrs = model_ft.fc.in_features
-    model_ft.fc = nn.Linear(num_ftrs, NUM_CLASSES)
     
-    # Check if a model already exists to continue training
+    # 2. Refine the Head (Add Dropout for regularization)
+    num_ftrs = model_ft.fc.in_features
+    model_ft.fc = nn.Sequential(
+        nn.Dropout(0.5),
+        nn.Linear(num_ftrs, NUM_CLASSES)
+    )
+    
+    # 3. Layer Unfreezing Strategy
+    # We freeze earlier layers and only unfreeze the deep layers (layer4) and the head
+    for name, param in model_ft.named_parameters():
+        if "layer4" in name or "fc" in name:
+            param.requires_grad = True
+        else:
+            param.requires_grad = False
+    
+    # 4. Check if a model already exists to continue training
     if os.path.exists(MODEL_SAVE_PATH):
         print(f"Loading existing model from {MODEL_SAVE_PATH} to continue training...")
         try:
@@ -221,10 +241,11 @@ if __name__ == "__main__":
     model_ft = model_ft.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer_ft = optim.Adam(model_ft.parameters(), lr=0.0001) # Lower LR for continuation
-
-    # Train
-    model_ft, history = train_model(model_ft, criterion, optimizer_ft, num_epochs=EPOCHS)
+    # Optimizer LR is now managed inside train_model with a scheduler
+    # We pass the model to the training loop which now handles its own optimizer
+    
+    # 5. Train
+    model_ft, history = train_model(model_ft, criterion, None, num_epochs=EPOCHS)
     
     # Save Model
     torch.save(model_ft.state_dict(), MODEL_SAVE_PATH)
