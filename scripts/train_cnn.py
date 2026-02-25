@@ -104,7 +104,7 @@ def plot_metrics(history):
     plt.legend()
     
     plt.savefig('training_metrics.png')
-    plt.show()
+    # plt.show() - Removed to avoid hanging in background
 
 def evaluate_model(model, dataloader):
     """
@@ -177,7 +177,7 @@ def evaluate_model(model, dataloader):
     plt.xlabel("Predicted")
     plt.ylabel("Actual")
     plt.savefig('confusion_matrix_complex.png')
-    plt.show()
+    # plt.show() - Removed to avoid hanging in background
 
     # Plot ROC Curve
     plt.figure(figsize=(8, 6))
@@ -190,7 +190,7 @@ def evaluate_model(model, dataloader):
     plt.ylabel("True Positive Rate")
     plt.legend(loc="lower right")
     plt.savefig('roc_curve.png')
-    plt.show()
+    # plt.show() - Removed to avoid hanging in background
 
     return {
         "Accuracy": acc,
